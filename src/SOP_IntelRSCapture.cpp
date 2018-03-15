@@ -85,36 +85,51 @@ SOP_RSCapture::SOP_RSCapture(OP_Network *net, const char *name, OP_Operator *op)
     mySopFlags.setManagesDataIDs(true);
 }
 
-SOP_RSCapture::~SOP_RSCapture() {}
+SOP_RSCapture::~SOP_RSCapture() {
+    pipe.stop();
+}
 
 OP_ERROR
 SOP_RSCapture::cookMySop(OP_Context &context)
 {
+    // Flag the SOP as being time dependent (i.e. cook on time changes)
+    flags().timeDep = 1;
  
-        // Wait for the next set of frames from the camera
-        auto frames = pipe.wait_for_frames();
+    // Wait for the next set of frames from the camera
+    rs2::frameset    frames = pipe.wait_for_frames();
+    if (frames.size() == 0) {
+        addWarning(SOP_MESSAGE, "No capture.");
+        return error();
+    }
+    rs2::depth_frame depth = frames.get_depth_frame();
+    // Generate the pointcloud and texture mappings
+    // points.reset();
+    // rs2::pointcloud pc;
+    points = pc.calculate(depth);
+    rs2::video_frame color = frames.get_color_frame();
+    // pc.map_to(color);
+    // const int height = color.get_height();
+    // const int width  = color.get_width();
+    // const uint8_t * rgb_buff = static_cast<const uint8_t*>(color.get_data());
 
-        auto depth = frames.get_depth_frame();
+    const rs2::vertex * vertices        = points.get_vertices();
+    // const rs2::texture_coordinate * uvs = points.get_texture_coordinates();
+    const size_t nverts = points.size();
+    GA_Offset ptoff = gdp->appendPointBlock(nverts);
 
-        // Generate the pointcloud and texture mappings
-        points = pc.calculate(depth);
+    // GA_RWHandleV3 colorh(gdp->addDiffuseAttribute(GA_ATTRIB_POINT));
 
-        // auto color = frames.get_color_frame();
-
-        const rs2::vertex * vertices = points.get_vertices();
-        const size_t nverts = points.size();
-        GA_Offset ptoff = gdp->appendPointBlock(nverts);
-        
-        GA_FOR_ALL_PTOFF(gdp, ptoff) {
-            const GA_Index index  = gdp->pointIndex(ptoff);
-            const rs2::vertex & v = vertices[index];
-            const UT_Vector3 pos(v.x, v.y, v.z);
-            gdp->setPos3(ptoff, pos);
-        }
-
-
-
-    
+    GA_FOR_ALL_PTOFF(gdp, ptoff) {
+        const GA_Index index  = gdp->pointIndex(ptoff);
+        const rs2::vertex & v = vertices[index];
+        // const uint8_t r       = rgb_buff[3*index+0];
+        // const uint8_t g       = rgb_buff[3*index+1];
+        // const uint8_t b       = rgb_buff[3*index+2];
+        // const UT_Vector3 cd(r*1.0f/255.0f, g*1.0f/255.0f, b*1.0f/255.0f);
+        const UT_Vector3 pos(v.x, v.y, v.z);
+        gdp->setPos3(ptoff, pos);
+        // colorh.set(ptoff, cd);
+    }
 
     gdp->getP()->bumpDataId();
 
