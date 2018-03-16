@@ -5,6 +5,7 @@
 #include <OP/OP_OperatorTable.h>
 #include <PRM/PRM_Include.h>
 #include <OP/OP_AutoLockInputs.h>
+#include <SYS/SYS_Math.h>
 #include <librealsense2/rs.hpp>
 
 #include "SOP_IntelRSCapture.hpp"
@@ -107,13 +108,13 @@ SOP_RSCapture::cookMySop(OP_Context &context)
         // pipe.stop();
         return error();
     }
-    // pc.map_to(color);
-    // const int height = color.get_height();
-    // const int width  = color.get_width();
-    // const uint8_t * rgb_buff = static_cast<const uint8_t*>(color.get_data());
+    pc.map_to(color);
+    const int height = color.get_height();
+    const int width  = color.get_width();
+    const uint8_t * rgb_buff = static_cast<const uint8_t*>(color.get_data());
 
     const rs2::vertex * vertices        = points.get_vertices();
-    // const rs2::texture_coordinate * uvs = points.get_texture_coordinates();
+    const rs2::texture_coordinate * uvs = points.get_texture_coordinates();
     const size_t nverts = points.size();
 
     if (nverts == 0)
@@ -124,18 +125,21 @@ SOP_RSCapture::cookMySop(OP_Context &context)
     }
     GA_Offset ptoff = gdp->appendPointBlock(nverts);
 
-    // GA_RWHandleV3 colorh(gdp->addDiffuseAttribute(GA_ATTRIB_POINT));
+    GA_RWHandleV3 colorh(gdp->addDiffuseAttribute(GA_ATTRIB_POINT));
 
     GA_FOR_ALL_PTOFF(gdp, ptoff) {
         const GA_Index index  = gdp->pointIndex(ptoff);
         const rs2::vertex & v = vertices[index];
-        // const uint8_t r       = rgb_buff[3*index+0];
-        // const uint8_t g       = rgb_buff[3*index+1];
-        // const uint8_t b       = rgb_buff[3*index+2];
-        // const UT_Vector3 cd(r*1.0f/255.0f, g*1.0f/255.0f, b*1.0f/255.0f);
+        const rs2::texture_coordinate & uv = uvs[index];
+        const int x = SYSfloor(uv.u * width);
+        const int y = SYSfloor(uv.v * height);
+        const uint8_t r       = rgb_buff[y*width+x+0];
+        const uint8_t g       = rgb_buff[y*width+x+1];
+        const uint8_t b       = rgb_buff[y*width+x+2];
+        const UT_Vector3 cd(r*1.0f/255.0f, g*1.0f/255.0f, b*1.0f/255.0f);
         const UT_Vector3 pos(v.x, v.y, v.z);
         gdp->setPos3(ptoff, pos);
-        // colorh.set(ptoff, cd);
+        colorh.set(ptoff, cd);
     }
 
     gdp->getP()->bumpDataId();
