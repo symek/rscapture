@@ -4,7 +4,7 @@
 #include <OP/OP_Operator.h>
 #include <OP/OP_OperatorTable.h>
 #include <PRM/PRM_Include.h>
-
+#include <OP/OP_AutoLockInputs.h>
 #include <librealsense2/rs.hpp>
 
 #include "SOP_IntelRSCapture.hpp"
@@ -29,45 +29,12 @@ newSopOperator(OP_OperatorTable *table)
         OP_FLAG_GENERATOR));
 }
 
-
-
 static PRM_Name names[] = {
-    // PRM_Name("model",   "Model"),
-    // PRM_Name("term",    "RBF Term"),
-    // PRM_Name("qcoef",   "Q (Smoothness)"),
-    // PRM_Name("zcoef",   "Z (Deviation)"),
-    // PRM_Name("radius",  "Radius"),
-    // PRM_Name("layers",  "Layers"),
-    // PRM_Name("lambda",  "Lambda"),
-    // PRM_Name("tangent", "Tangent space"),
-    // PRM_Name("morphspace","Blendshapes subspace"),
-    // PRM_Name("maxedges",      "Max edges"),
-    // PRM_Name("doclampweight", "Clamp weights"),
-    // PRM_Name("weightrange", "Range"),
-    // PRM_Name("dofalloff",   "Falloff"),
-    // PRM_Name("falloffradius", "Falloff radius"),
-    // PRM_Name("falloffrate", "Falloff rate (exponent)"),
+    PRM_Name("model",   "Model"),
 };
 
 PRM_Template
 SOP_RSCapture::myTemplateList[] = {
-    PRM_Template(PRM_STRING,    1, &PRMgroupName, 0, &SOP_Node::pointGroupMenu, 0, 0, \
-        SOP_Node::getGroupSelectButton(GA_GROUP_POINT)),
-    // PRM_Template(PRM_ORD,   1, &names[0], 0, &modelMenu, 0, 0, 0, 0, model_help),
-    // PRM_Template(PRM_ORD,   1, &names[1], 0, &termMenu, 0, 0, 0, 0, term_help),
-    // PRM_Template(PRM_FLT_J, 1, &names[2], PRMoneDefaults),
-    // PRM_Template(PRM_FLT_J, 1, &names[3], PRMfiveDefaults),
-    // PRM_Template(PRM_FLT_LOG,1,&names[4], PRMoneDefaults, 0, &radiusRange, 0, 0, 0, radius_help), // radius
-    // PRM_Template(PRM_INT_J, 1, &names[9], PRMfourDefaults, 0, 0, 0, 0, 0, maxedges_help), // maxedges
-    // PRM_Template(PRM_INT_J, 1, &names[5], PRMfourDefaults), // layers
-    // PRM_Template(PRM_FLT_J, 1, &names[6], PRMpointOneDefaults), // lambda
-    // PRM_Template(PRM_TOGGLE,1, &names[7], PRMzeroDefaults, 0, 0, 0, 0, 0, tangent_help), // tangent
-    // PRM_Template(PRM_TOGGLE,1, &names[8], PRMzeroDefaults, 0, 0, 0, 0, 0, morphspace_help), // morphspace
-    // PRM_Template(PRM_TOGGLE,1, &names[10], PRMzeroDefaults, 0, 0, 0, 0, 0, weightrange_help),
-    // PRM_Template(PRM_FLT_J, 2, &names[11], ZeroOneDefaults, 0, 0, 0, 0, 0, weightrange_help),
-    // PRM_Template(PRM_TOGGLE,1, &names[12], PRMzeroDefaults, 0, 0, 0, 0, 0),
-    // PRM_Template(PRM_FLT_LOG,1,&names[13], PRMoneDefaults, 0, &radiusRange, 0, 0, 0, radius_help), // falloffradius
-    // PRM_Template(PRM_FLT_J, 1, &names[14], PRMoneDefaults, 0, &falloffRange, 0, 0, 0, falloff_help), // falloff rate
     PRM_Template(),
 };
 
@@ -81,8 +48,12 @@ SOP_RSCapture::myConstructor(OP_Network *net, const char *name, OP_Operator *op)
 SOP_RSCapture::SOP_RSCapture(OP_Network *net, const char *name, OP_Operator *op)
     : SOP_Node(net, name, op)
 {
-    pipe.start();
     mySopFlags.setManagesDataIDs(true);
+    pipe.start();
+    // Wait for the next set of frames from the camera
+    for (int i=0; i<30; ++i) {
+        rs2::frameset tmp = pipe.wait_for_frames();
+    }
 }
 
 SOP_RSCapture::~SOP_RSCapture() {
@@ -92,21 +63,50 @@ SOP_RSCapture::~SOP_RSCapture() {
 OP_ERROR
 SOP_RSCapture::cookMySop(OP_Context &context)
 {
-    // Flag the SOP as being time dependent (i.e. cook on time changes)
     flags().timeDep = 1;
+    OP_AutoLockInputs inputs(this);
+    if (inputs.lock(context) >= UT_ERROR_ABORT)
+        return error();
+    gdp->clearAndDestroy();
+
+
+    // Flag the SOP as being time dependent (i.e. cook on time changes)
+    // rs2::pointcloud pc;
+    // We want the points object to be persistent so we can display the last cloud when a frame drops
+    // rs2::points points;
+
+    // Declare RealSense pipeline, encapsulating the actual device and sensors
+    // rs2::pipeline pipe;
+    // pipe.start();
  
-    // Wait for the next set of frames from the camera
-    rs2::frameset    frames = pipe.wait_for_frames();
-    if (frames.size() == 0) {
+    
+
+    rs2::frameset frames = pipe.wait_for_frames();
+    const bool result = (frames.size() != 0);
+    // const bool result = pipe.poll_for_frames(&frames);
+
+    if (!result) {
         addWarning(SOP_MESSAGE, "No capture.");
+        // pipe.stop();
         return error();
     }
+
     rs2::depth_frame depth = frames.get_depth_frame();
+    if (!depth) {
+        addWarning(SOP_MESSAGE, "No depth frame");
+        pipe.stop();
+        return error();
+    }
     // Generate the pointcloud and texture mappings
     // points.reset();
     // rs2::pointcloud pc;
     points = pc.calculate(depth);
     rs2::video_frame color = frames.get_color_frame();
+    if (!color) {
+        addWarning(SOP_MESSAGE, "No depth frame");
+        // pipe.stop();
+        return error();
+    }
     // pc.map_to(color);
     // const int height = color.get_height();
     // const int width  = color.get_width();
@@ -115,6 +115,13 @@ SOP_RSCapture::cookMySop(OP_Context &context)
     const rs2::vertex * vertices        = points.get_vertices();
     // const rs2::texture_coordinate * uvs = points.get_texture_coordinates();
     const size_t nverts = points.size();
+
+    if (nverts == 0)
+    {
+        addWarning(SOP_MESSAGE, "No points.");
+        // pipe.stop();
+        return error();
+    }
     GA_Offset ptoff = gdp->appendPointBlock(nverts);
 
     // GA_RWHandleV3 colorh(gdp->addDiffuseAttribute(GA_ATTRIB_POINT));
@@ -132,6 +139,7 @@ SOP_RSCapture::cookMySop(OP_Context &context)
     }
 
     gdp->getP()->bumpDataId();
+    
 
     return error();
 }
