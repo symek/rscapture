@@ -70,6 +70,8 @@ SOP_RSCapture::cookMySop(OP_Context &context)
         return error();
     
 
+    
+
     rs2::frameset frames = pipe.wait_for_frames();
     const bool result = (frames.size() != 0);
 
@@ -85,7 +87,7 @@ SOP_RSCapture::cookMySop(OP_Context &context)
         return error();
     }
     // Generate the pointcloud and texture mappings
-    points = pc.calculate(depth);
+    points = pointcloud.calculate(depth);
     const size_t nverts = points.size();
     if (nverts == 0) {
         addWarning(SOP_MESSAGE, "No points.");
@@ -97,7 +99,7 @@ SOP_RSCapture::cookMySop(OP_Context &context)
         addWarning(SOP_MESSAGE, "No depth frame");
         return error();
     }
-    pc.map_to(color);
+    pointcloud.map_to(color);
 
     const int height = color.get_height();
     const int width  = color.get_width();
