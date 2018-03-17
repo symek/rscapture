@@ -5,7 +5,7 @@ project( rscapture )
 list( APPEND CMAKE_PREFIX_PATH "$ENV{HT}/cmake")
 find_package( Houdini REQUIRED )
 
-# Alglib finder with IRS_PREFIX_PATH var:
+# Intel Realsense finder with IRS_PREFIX_PATH var:
 set( IRS_INCLUDE_PATH "$ENV{IRS_PREFIX_PATH}/include")
 set( IRS_LIB_PATH     "$ENV{IRS_PREFIX_PATH}/build")
 
@@ -19,21 +19,55 @@ endif()
 include_directories( ${IRS_INCLUDE_PATH} )
 link_directories( ${IRS_LIB_PATH} )
 
-
 # set( CMAKE_BUILD_TYPE Debug)
 
 # Add a library with two source files.
-set( library_name SOP_RealsenseCapture )
+set( realsense_dso SOP_RealsenseCapture )
 
-add_library( ${library_name} SHARED
+add_library( ${realsense_dso} SHARED
     src/SOP_IntelRSCapture.cpp
     src/SOP_IntelRSCapture.hpp
 )
 
 # Link against the Houdini libraries, and add required include directories and compile definitions.
-target_link_libraries( ${library_name} Houdini )
-target_link_libraries( ${library_name} realsense2)
+target_link_libraries( ${realsense_dso} Houdini )
+target_link_libraries( ${realsense_dso} realsense2)
 
 # Configure several common target properties, such as its output directory.
-houdini_configure_target( ${library_name} )
+houdini_configure_target( ${realsense_dso} )
+
+
+# Intel Realsense finder with IRS_PREFIX_PATH var:
+set( SPARSEICP_INCLUDE_PATH "$ENV{SPARSEICP_PREFIX_PATH}")
+set( NANOFLANN_INCLUDE_PATH "$ENV{SPARSEICP_PREFIX_PATH}/include")
+
+if (NOT EXISTS ${SPARSEICP_INCLUDE_PATH})
+	message(FATAL_ERROR "Specify SPARSEICP location with $SPARSEICP_PREFIX_PATH. CMake will exit now.")
+else()
+	message(STATUS "SPARSEICP_INCLUDE_PATH: ${SPARSEICP_INCLUDE_PATH}")
+	message(STATUS "NANOFLANN_INCLUDE_PATH: ${NANOFLANN_INCLUDE_PATH}")
+endif()
+
+include_directories( ${SPARSEICP_INCLUDE_PATH} )
+include_directories( ${NANOFLANN_INCLUDE_PATH} )
+
+# Eigen time
+set( EIGEN_INCLUDE_DIR "$ENV{EIGEN_INCLUDE_DIR}")
+if (NOT EXISTS ${EIGEN_INCLUDE_DIR})
+	message(FATAL_ERROR "Specify EIGEN location with $EIGEN_INCLUDE_DIR. CMake will exit now.")
+else()
+	message(STATUS "EIGEN_INCLUDE_DIR: ${EIGEN_INCLUDE_DIR}")
+endif()
+include_directories(${EIGEN_INCLUDE_DIR})
+
+set( pcallign_dso SOP_PCAllign)
+
+add_library( ${pcallign_dso} SHARED
+	src/SOP_PCAllign.cpp
+	src/SOP_PCAllign.hpp)
+
+target_link_libraries( ${pcallign_dso} Houdini)
+houdini_configure_target( ${pcallign_dso} )
+
+
 
