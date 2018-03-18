@@ -32,11 +32,35 @@ newSopOperator(OP_OperatorTable *table)
 }
 
 static PRM_Name names[] = {
-    PRM_Name("model",   "Model"),
+    PRM_Name("usepenalty",   "Use penalty"),
+    PRM_Name("p",            "P norm"),
+    PRM_Name("mu",           "Penelty weight"),
+    PRM_Name("alpha",        "Penalty Factor"),
+    PRM_Name("maxmu",        "Max penalty"),
+    PRM_Name("maxicp",       "Max ICP iteration"),
+    PRM_Name("maxouter",     "Max outer iteration"),
+    PRM_Name("maxinner",     "Max inner iteration"),
+    PRM_Name("stop",         "Stopping criteria"),
 };
+
+
+static PRM_Default alphaDefault(1.2);
+static PRM_Default maxmuDefault(1e5);
+static PRM_Default maxicpDefault(100);
+static PRM_Default stopDefault(1e-5);
+
 
 PRM_Template
 SOP_PCAllign::myTemplateList[] = {
+    PRM_Template(PRM_TOGGLE,1, &names[0], PRMzeroDefaults),
+    PRM_Template(PRM_FLT_J, 1, &names[1], PRMoneDefaults),
+    PRM_Template(PRM_FLT_J, 1, &names[2], PRMtenDefaults),
+    PRM_Template(PRM_FLT_J, 1, &names[3], &alphaDefault),
+    PRM_Template(PRM_FLT_J, 1, &names[4], &maxmuDefault),
+    PRM_Template(PRM_INT_J, 1, &names[5], &maxicpDefault),
+    PRM_Template(PRM_INT_J, 1, &names[6], &maxicpDefault),
+    PRM_Template(PRM_INT_J, 1, &names[7], PRMoneDefaults),
+    PRM_Template(PRM_FLT_LOG, 1, &names[8], &stopDefault),
     PRM_Template(),
 };
 
@@ -66,17 +90,25 @@ SOP_PCAllign::cookMySop(OP_Context &context)
     fpreal t = context.getTime();
     duplicatePointSource(0, context);
 
-    // Get rest and deform geometry:
+    // Get second geometry:
     const GU_Detail *source_gdp = inputGeo(1);
 
-    // Points count in control rig should match:
+    // any points?:
     if (source_gdp->getNumPoints() == 0 || gdp->getNumPoints() == 0) {
-        addError(SOP_MESSAGE, "Needs two points clouds to allign.");
+        addError(SOP_MESSAGE, "Needs two points clouds to align.");
         return error();
     }
 
-    // Eigen::MatrixXd target(3, gdp->getNumPoints());
-    // Eigen::MatrixXd source(3, source_gdp->getNumPoints());
+    const int   penalty = USE_PENALTY(t);
+    const float p_norm  = P_NORM(t);   
+    const float mu      = MU(t);         
+    const float alpha   = ALPHA(t);         
+    const float max_mu  = MAX_MU(t);         
+    const int   max_icp = MAX_ICP(t);       
+    const int   max_o   = MAX_OUTER(t);   
+    const int   max_i   = MAX_INNER(t);   
+    const float stop    = STOP(t);      
+   
     Vertices target, source;
     target.resize(Eigen::NoChange, gdp->getNumPoints());
     source.resize(Eigen::NoChange, source_gdp->getNumPoints());
@@ -100,11 +132,17 @@ SOP_PCAllign::cookMySop(OP_Context &context)
         }
     }
 
-    SICP::Parameters pars;
-    pars.p = .5;
-    pars.max_icp = 15;
-    pars.print_icpn = true;
-    SICP::point_to_point(source, target, pars);
+    SICP::Parameters parms;
+    parms.use_penalty = static_cast<bool>(penalty);
+    parms.p = p_norm;
+    parms.mu = mu;
+    parms.alpha = alpha;
+    parms.max_mu = max_mu;
+    parms.max_icp = max_icp;
+    parms.max_outer = max_o;
+    parms.max_inner = max_i;
+    parms.stop = stop;
+    SICP::point_to_point(source, target, parms);
 
     ptoff = gdp->appendPointBlock(source_gdp->getNumPoints());
     
