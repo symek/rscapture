@@ -63,8 +63,8 @@ include_directories(${EIGEN_INCLUDE_DIR})
 set( pcallign_dso SOP_PCAllign)
 
 add_library( ${pcallign_dso} SHARED
-	src/SOP_PCAllign.cpp
-	src/SOP_PCAllign.hpp)
+	src/SOP_PCAlign.cpp
+	src/SOP_PCAlign.hpp)
 
 target_link_libraries( ${pcallign_dso} Houdini)
 houdini_configure_target( ${pcallign_dso} )
