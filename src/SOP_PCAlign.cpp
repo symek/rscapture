@@ -7,14 +7,14 @@
 #include <OP/OP_AutoLockInputs.h>
 #include <SYS/SYS_Math.h>
 #include <ICP.h>
-#include "SOP_PCAllign.hpp"
+#include "SOP_PCAlign.hpp"
 
 
 #include <unordered_map>
 #include <memory>
 
 
-using namespace pcallign;
+using namespace pcalign;
 typedef double Scalar;
 typedef Eigen::Matrix<Scalar, 3, Eigen::Dynamic> Vertices;
 
@@ -22,10 +22,10 @@ void
 newSopOperator(OP_OperatorTable *table)
 {
     table->addOperator(new OP_Operator(
-        "pcallign",
-        "Point Cloud Allign",
-        SOP_PCAllign::myConstructor,
-        SOP_PCAllign::myTemplateList,
+        "pcalign",
+        "Point Cloud Align",
+        SOP_PCAlign::myConstructor,
+        SOP_PCAlign::myTemplateList,
         2,
         2,
         0));
@@ -51,7 +51,7 @@ static PRM_Default stopDefault(1e-5);
 
 
 PRM_Template
-SOP_PCAllign::myTemplateList[] = {
+SOP_PCAlign::myTemplateList[] = {
     PRM_Template(PRM_TOGGLE,1, &names[0], PRMzeroDefaults),
     PRM_Template(PRM_FLT_J, 1, &names[1], PRMoneDefaults),
     PRM_Template(PRM_FLT_J, 1, &names[2], PRMtenDefaults),
@@ -66,21 +66,21 @@ SOP_PCAllign::myTemplateList[] = {
 
 
 OP_Node *
-SOP_PCAllign::myConstructor(OP_Network *net, const char *name, OP_Operator *op)
+SOP_PCAlign::myConstructor(OP_Network *net, const char *name, OP_Operator *op)
 {
-    return new SOP_PCAllign(net, name, op);
+    return new SOP_PCAlign(net, name, op);
 }
 
-SOP_PCAllign::SOP_PCAllign(OP_Network *net, const char *name, OP_Operator *op)
+SOP_PCAlign::SOP_PCAlign(OP_Network *net, const char *name, OP_Operator *op)
     : SOP_Node(net, name, op)
 {
     mySopFlags.setManagesDataIDs(true);  
 }
 
-SOP_PCAllign::~SOP_PCAllign() {}
+SOP_PCAlign::~SOP_PCAlign() {}
 
 OP_ERROR
-SOP_PCAllign::cookMySop(OP_Context &context)
+SOP_PCAlign::cookMySop(OP_Context &context)
 {
     flags().timeDep = 1;
     OP_AutoLockInputs inputs(this);

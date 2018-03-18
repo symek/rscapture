@@ -1,13 +1,13 @@
 #pragma once 
 #include <SOP/SOP_Node.h>
 
-namespace pcallign {
+namespace pcalign {
 
-class SOP_PCAllign : public SOP_Node
+class SOP_PCAlign : public SOP_Node
 {
 public:
-         SOP_PCAllign(OP_Network *net, const char *name, OP_Operator *op);
-    virtual ~SOP_PCAllign();
+         SOP_PCAlign(OP_Network *net, const char *name, OP_Operator *op);
+    virtual ~SOP_PCAlign();
     static PRM_Template      myTemplateList[];
     static OP_Node      *myConstructor(OP_Network*, const char *,
                                 OP_Operator *);
