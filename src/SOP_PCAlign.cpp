@@ -35,14 +35,37 @@ static PRM_Name names[] = {
     PRM_Name("usepenalty",   "Use penalty"),
     PRM_Name("p",            "P norm"),
     PRM_Name("mu",           "Penelty weight"),
-    PRM_Name("alpha",        "Penalty Factor"),
+    PRM_Name("alpha",        "Penalty factor"),
     PRM_Name("maxmu",        "Max penalty"),
     PRM_Name("maxicp",       "Max ICP iteration"),
     PRM_Name("maxouter",     "Max outer iteration"),
     PRM_Name("maxinner",     "Max inner iteration"),
     PRM_Name("stop",         "Stopping criteria"),
+    PRM_Name("method",       "Method"),
+    PRM_Name("weightfunc",   "Reweight function"),
 };
 
+static PRM_Name  modelChoices[] =
+{
+    PRM_Name("0", "Sparse ICP"),
+    PRM_Name("1", "Reweighted ICP"),
+    PRM_Name("2", "Intel FGR"),
+    PRM_Name(0)
+};
+
+static PRM_Name weightFuncChoices[] = 
+{
+    PRM_Name("0", "PNorm"),
+    PRM_Name("1", "Tukey"),
+    PRM_Name("2", "Fair"),
+    PRM_Name("3", "Logistic"),
+    PRM_Name("4", "Trimmed"),
+    PRM_Name("5", "None"),
+    PRM_Name(0)
+};
+
+static PRM_ChoiceList  methodMenu(PRM_CHOICELIST_SINGLE, modelChoices);
+static PRM_ChoiceList  weightMenu(PRM_CHOICELIST_SINGLE, weightFuncChoices);
 
 static PRM_Default alphaDefault(1.2);
 static PRM_Default maxmuDefault(1e5);
@@ -52,6 +75,7 @@ static PRM_Default stopDefault(1e-5);
 
 PRM_Template
 SOP_PCAlign::myTemplateList[] = {
+    PRM_Template(PRM_ORD,   1, &names[9], 0, &methodMenu),
     PRM_Template(PRM_TOGGLE,1, &names[0], PRMzeroDefaults),
     PRM_Template(PRM_FLT_J, 1, &names[1], PRMoneDefaults),
     PRM_Template(PRM_FLT_J, 1, &names[2], PRMtenDefaults),
@@ -60,7 +84,8 @@ SOP_PCAlign::myTemplateList[] = {
     PRM_Template(PRM_INT_J, 1, &names[5], &maxicpDefault),
     PRM_Template(PRM_INT_J, 1, &names[6], &maxicpDefault),
     PRM_Template(PRM_INT_J, 1, &names[7], PRMoneDefaults),
-    PRM_Template(PRM_FLT_LOG, 1, &names[8], &stopDefault),
+    PRM_Template(PRM_FLT_LOG, 1, &names[8],     &stopDefault),
+    PRM_Template(PRM_ORD,     1, &names[10], PRMfiveDefaults, &weightMenu),
     PRM_Template(),
 };
 
@@ -99,6 +124,7 @@ SOP_PCAlign::cookMySop(OP_Context &context)
         return error();
     }
 
+    const int   method  = METHOD(t);
     const int   penalty = USE_PENALTY(t);
     const float p_norm  = P_NORM(t);   
     const float mu      = MU(t);         
@@ -107,7 +133,8 @@ SOP_PCAlign::cookMySop(OP_Context &context)
     const int   max_icp = MAX_ICP(t);       
     const int   max_o   = MAX_OUTER(t);   
     const int   max_i   = MAX_INNER(t);   
-    const float stop    = STOP(t);      
+    const float stop    = STOP(t);  
+    const int   weightfunc = WEIGHTFUNC(t);    
    
     Vertices target, source;
     target.resize(Eigen::NoChange, gdp->getNumPoints());
@@ -132,17 +159,28 @@ SOP_PCAlign::cookMySop(OP_Context &context)
         }
     }
 
-    SICP::Parameters parms;
-    parms.use_penalty = static_cast<bool>(penalty);
-    parms.p = p_norm;
-    parms.mu = mu;
-    parms.alpha = alpha;
-    parms.max_mu = max_mu;
-    parms.max_icp = max_icp;
-    parms.max_outer = max_o;
-    parms.max_inner = max_i;
-    parms.stop = stop;
-    SICP::point_to_point(source, target, parms);
+    if (method == ALIGN_METHOD::SPARSE_ICP) {
+        SICP::Parameters parms;
+        parms.use_penalty = static_cast<bool>(penalty);
+        parms.p = p_norm;
+        parms.mu = mu;
+        parms.alpha = alpha;
+        parms.max_mu = max_mu;
+        parms.max_icp = max_icp;
+        parms.max_outer = max_o;
+        parms.max_inner = max_i;
+        parms.stop = stop;
+        SICP::point_to_point(source, target, parms);
+    } else if (method == ALIGN_METHOD::REWEIGHTED_ICP) {
+        ICP::Parameters parms;
+        // this crashes... atm
+        // parms.f = static_cast<ICP::Function>(weightfunc);
+        parms.p = p_norm;
+        parms.max_icp = max_icp;
+        parms.max_outer = max_o;
+        parms.stop = stop;
+        ICP::point_to_point(source, target, parms);
+    }
 
     ptoff = gdp->appendPointBlock(source_gdp->getNumPoints());
     

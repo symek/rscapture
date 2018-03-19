@@ -3,6 +3,22 @@
 
 namespace pcalign {
 
+
+enum ALIGN_METHOD {
+    SPARSE_ICP,
+    REWEIGHTED_ICP,
+    INTEL_FGR,
+};
+
+ enum WEIGHT_FUNC {
+        PNORM,
+        TUKEY,
+        FAIR,
+        LOGISTIC,
+        TRIMMED,
+        NONE,
+    };
+
 class SOP_PCAlign : public SOP_Node
 {
 public:
@@ -16,6 +32,7 @@ protected:
     virtual OP_ERROR         cookMySop(OP_Context &context);
 private:
 
+    int     METHOD(fpreal t)      { return evalInt("method", 0, t); }
     int     USE_PENALTY(fpreal t) { return evalInt("usepenalty", 0, t); }
     fpreal  P_NORM(fpreal t)      { return evalFloat("pnorm", 0, t); }
     fpreal  MU(fpreal t)          { return evalFloat("mu", 0, t); }
@@ -25,6 +42,7 @@ private:
     int     MAX_OUTER(fpreal t)   { return evalInt("maxouter", 0, t); }
     int     MAX_INNER(fpreal t)   { return evalInt("maxinner", 0, t); }
     fpreal  STOP(fpreal t)       { return evalFloat("stop", 0, t); }
+    int     WEIGHTFUNC(fpreal t) { return evalInt("weightfunc", 0, t); }
 
 };
 
