@@ -47,9 +47,10 @@ static PRM_Name names[] = {
 
 static PRM_Name  modelChoices[] =
 {
-    PRM_Name("0", "Sparse ICP"),
-    PRM_Name("1", "Reweighted ICP"),
-    PRM_Name("2", "Intel FGR"),
+    PRM_Name("0", "Rigid Motion"),
+    PRM_Name("1", "Sparse ICP"),
+    PRM_Name("2", "Reweighted ICP"),
+    PRM_Name("3", "Intel FGR"),
     PRM_Name(0)
 };
 
@@ -157,6 +158,26 @@ SOP_PCAlign::cookMySop(OP_Context &context)
             source(1, idx) = pos.y();
             source(2, idx) = pos.z();
         }
+    }
+
+    if (method == ALIGN_METHOD::RIGID) {
+        Eigen::Affine3d t = RigidMotionEstimator::point_to_point(source, target);
+        const UT_Matrix4F m(t(0,0), t(0,1), t(0,2), t(0,3),
+                            t(1,0), t(1,1), t(1,2), t(1,3),
+                            t(2,0), t(2,1), t(2,2), t(2,3),
+                            t(3,0), t(3,1), t(3,2), t(3,3));
+
+        GA_RWHandleM4  xform_h(gdp->addFloatTuple(GA_ATTRIB_DETAIL, "transform", 16));
+        xform_h.set(GA_Offset(0), m);
+
+        GA_FOR_ALL_PTOFF(gdp, ptoff) {
+            UT_Vector3 pos = gdp->getPos3(ptoff);
+            pos *= m;
+            gdp->setPos3(ptoff, pos);
+        }
+
+        gdp->getP()->bumpDataId();
+        return error();
     }
 
     if (method == ALIGN_METHOD::SPARSE_ICP) {

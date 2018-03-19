@@ -5,6 +5,7 @@ namespace pcalign {
 
 
 enum ALIGN_METHOD {
+    RIGID,
     SPARSE_ICP,
     REWEIGHTED_ICP,
     INTEL_FGR,
