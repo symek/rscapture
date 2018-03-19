@@ -116,10 +116,10 @@ SOP_PCAlign::cookMySop(OP_Context &context)
     duplicatePointSource(0, context);
 
     // Get second geometry:
-    const GU_Detail *source_gdp = inputGeo(1);
+    const GU_Detail * target_gdp = inputGeo(1);
 
     // any points?:
-    if (source_gdp->getNumPoints() == 0 || gdp->getNumPoints() == 0) {
+    if (target_gdp->getNumPoints() == 0 || gdp->getNumPoints() == 0) {
         addError(SOP_MESSAGE, "Needs two points clouds to align.");
         return error();
     }
@@ -137,8 +137,8 @@ SOP_PCAlign::cookMySop(OP_Context &context)
     const int   weightfunc = WEIGHTFUNC(t);    
    
     Vertices target, source;
-    target.resize(Eigen::NoChange, gdp->getNumPoints());
-    source.resize(Eigen::NoChange, source_gdp->getNumPoints());
+    source.resize(Eigen::NoChange, gdp->getNumPoints());
+    target.resize(Eigen::NoChange, target_gdp->getNumPoints());
 
     GA_Offset ptoff;
     GA_FOR_ALL_PTOFF(gdp, ptoff){
@@ -150,9 +150,9 @@ SOP_PCAlign::cookMySop(OP_Context &context)
     }
 
     {
-        GA_FOR_ALL_PTOFF(source_gdp, ptoff){
-            const UT_Vector3 pos = source_gdp->getPos3(ptoff);
-            const GA_Index   idx = source_gdp->pointIndex(ptoff);
+        GA_FOR_ALL_PTOFF(target_gdp, ptoff){
+            const UT_Vector3 pos = target_gdp->getPos3(ptoff);
+            const GA_Index   idx = target_gdp->pointIndex(ptoff);
             source(0, idx) = pos.x();
             source(1, idx) = pos.y();
             source(2, idx) = pos.z();
@@ -182,13 +182,13 @@ SOP_PCAlign::cookMySop(OP_Context &context)
         ICP::point_to_point(source, target, parms);
     }
 
-    ptoff = gdp->appendPointBlock(source_gdp->getNumPoints());
-    
-    for(size_t i=0; i<source_gdp->getNumPoints(); ++i, ++ptoff) {
-        const UT_Vector3 pos(source(0, i), source(1, i), source(2, i));
-        gdp->setPos3(ptoff, pos);
+    {
+        GA_FOR_ALL_PTOFF(gdp, ptoff){
+            const GA_Index i = gdp->pointIndex(ptoff);
+            const UT_Vector3 pos(source(0, i), source(1, i), source(2, i));
+            gdp->setPos3(ptoff, pos);
+        }
     }
-    
 
     gdp->getP()->bumpDataId();
     return error();
