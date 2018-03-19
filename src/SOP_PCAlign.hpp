@@ -25,6 +25,7 @@ class SOP_PCAlign : public SOP_Node
 public:
          SOP_PCAlign(OP_Network *net, const char *name, OP_Operator *op);
     virtual ~SOP_PCAlign();
+    virtual bool updateParmsFlags() override;
     static PRM_Template      myTemplateList[];
     static OP_Node      *myConstructor(OP_Network*, const char *,
                                 OP_Operator *);
@@ -33,7 +34,7 @@ protected:
     virtual OP_ERROR         cookMySop(OP_Context &context);
 private:
 
-    int     METHOD(fpreal t)      { return evalInt("method", 0, t); }
+    int     METHOD()              { return evalInt("method", 0, 0); }
     int     USE_PENALTY(fpreal t) { return evalInt("usepenalty", 0, t); }
     fpreal  P_NORM(fpreal t)      { return evalFloat("pnorm", 0, t); }
     fpreal  MU(fpreal t)          { return evalFloat("mu", 0, t); }

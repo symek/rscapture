@@ -7,6 +7,8 @@
 #include <OP/OP_AutoLockInputs.h>
 #include <SYS/SYS_Math.h>
 #include <ICP.h>
+#include "pcl_fpfh.hpp"
+#include "intel_fgr.hpp"
 #include "SOP_PCAlign.hpp"
 
 
@@ -90,6 +92,18 @@ SOP_PCAlign::myTemplateList[] = {
     PRM_Template(),
 };
 
+bool
+SOP_PCAlign::updateParmsFlags()
+{
+    bool    changed = SOP_Node::updateParmsFlags();
+    bool    method   = evalInt("method", 0, 0);
+    // if (method == ALIGN_METHOD::RIGID){
+        // changed |= enableParm("maxicp", 0);
+    // }
+
+    // changed |= enableParm("copcolor", use_path);
+    return changed;
+}
 
 OP_Node *
 SOP_PCAlign::myConstructor(OP_Network *net, const char *name, OP_Operator *op)
@@ -125,7 +139,7 @@ SOP_PCAlign::cookMySop(OP_Context &context)
         return error();
     }
 
-    const int   method  = METHOD(t);
+    const int   method  = METHOD();
     const int   penalty = USE_PENALTY(t);
     const float p_norm  = P_NORM(t);   
     const float mu      = MU(t);         
@@ -178,9 +192,8 @@ SOP_PCAlign::cookMySop(OP_Context &context)
 
         gdp->getP()->bumpDataId();
         return error();
-    }
 
-    if (method == ALIGN_METHOD::SPARSE_ICP) {
+    } else if (method == ALIGN_METHOD::SPARSE_ICP) {
         SICP::Parameters parms;
         parms.use_penalty = static_cast<bool>(penalty);
         parms.p = p_norm;
@@ -192,6 +205,12 @@ SOP_PCAlign::cookMySop(OP_Context &context)
         parms.max_inner = max_i;
         parms.stop = stop;
         SICP::point_to_point(source, target, parms);
+        GA_FOR_ALL_PTOFF(gdp, ptoff){
+            const GA_Index i = gdp->pointIndex(ptoff);
+            const UT_Vector3 pos(source(0, i), source(1, i), source(2, i));
+            gdp->setPos3(ptoff, pos);
+        }
+
     } else if (method == ALIGN_METHOD::REWEIGHTED_ICP) {
         ICP::Parameters parms;
         // this crashes... atm
@@ -201,15 +220,75 @@ SOP_PCAlign::cookMySop(OP_Context &context)
         parms.max_outer = max_o;
         parms.stop = stop;
         ICP::point_to_point(source, target, parms);
-    }
-
-    {
         GA_FOR_ALL_PTOFF(gdp, ptoff){
             const GA_Index i = gdp->pointIndex(ptoff);
             const UT_Vector3 pos(source(0, i), source(1, i), source(2, i));
             gdp->setPos3(ptoff, pos);
         }
+
+    } else if (method == ALIGN_METHOD::INTEL_FGR) {
+        sop_pcl::Points::Ptr       points (new sop_pcl::Points);
+        sop_pcl::Normals::Ptr      normals(new sop_pcl::Normals);
+        sop_pcl::FeatureHists::Ptr fpfhs(new sop_pcl::FeatureHists);
+
+        sop_pcl::gdp_to_pcl(gdp, points);
+        sop_pcl::estimate_normals(points, normals);
+        sop_pcl::compute_fpfh(points, normals, fpfhs);
+
+        std::vector<Eigen::Vector3f> positions(points->size());
+        std::vector<Eigen::VectorXf> features(fpfhs->size());
+        // both are vectors of eigen Vectors, should be easy to
+        // cheat and swap buffers...    
+        for (int i=0; i<points->size(); ++i) {
+            const pcl::PointXYZ & point = points->points[i];
+            const pcl::FPFHSignature33 & feat  = fpfhs->points[i];
+            const Eigen::Vector3f epoint(point.x, point.y, point.z);
+            Eigen::VectorXf efeat; efeat.resize(33);
+            for (int j=0; j<33; ++j) {
+                efeat(j) = feat.histogram[j];
+            }
+            positions[i] = epoint;
+            features[i]  = efeat;
+        }
+
+        FastGlobalRegistration ifgr; 
+        ifgr.pointcloud_.push_back(positions);
+        ifgr.features_.push_back(features);
+        ifgr.NormalizePoints();
+        ifgr.AdvancedMatching();
+        // ifgr.OptimizePairwise(true, ITERATION_NUMBER); 
+        // Eigen::Matrix4f t = ifgr.GetTrans();
+
+        // const UT_Matrix4F m(t(0,0), t(0,1), t(0,2), t(0,3),
+        //                     t(1,0), t(1,1), t(1,2), t(1,3),
+        //                     t(2,0), t(2,1), t(2,2), t(2,3),
+        //                     t(3,0), t(3,1), t(3,2), t(3,3));
+
+        // GA_RWHandleM4  xform_h(gdp->addFloatTuple(GA_ATTRIB_DETAIL, "transform", 16));
+        // xform_h.set(GA_Offset(0), m);
+
+        // {
+        //     GA_FOR_ALL_PTOFF(gdp, ptoff) {
+        //             UT_Vector3 pos = gdp->getPos3(ptoff);
+        //             pos *= m;
+        //             gdp->setPos3(ptoff, pos);
+        //         }
+        // }
+
+        // GA_RWHandleV3 norm_h(gdp->addFloatTuple(GA_ATTRIB_POINT, "N", 3));
+        // GA_FOR_ALL_PTOFF(gdp, ptoff) {
+        //     const GA_Index i = gdp->pointIndex(ptoff);
+        //     const pcl::Normal & n = normals->at(i);
+        //     const UT_Vector3 normal(n.normal_x, n.normal_y, n.normal_z);
+        //     norm_h.set(ptoff, normal);
+        // }
+    
+
+        // gdp->getP()->bumpDataId();
+        // return error();
+
     }
+
 
     gdp->getP()->bumpDataId();
     return error();

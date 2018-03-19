@@ -60,13 +60,32 @@ else()
 endif()
 include_directories(${EIGEN_INCLUDE_DIR})
 
+
+# PCL time
+find_package(PCL 1.3 REQUIRED COMPONENTS common features)
+
+set( EIGEN_INCLUDE_DIR "$ENV{EIGEN_INCLUDE_DIR}")
+if (NOT EXISTS ${EIGEN_INCLUDE_DIR})
+	message(FATAL_ERROR "Specify EIGEN location with $EIGEN_INCLUDE_DIR. CMake will exit now.")
+else()
+	message(STATUS "EIGEN_INCLUDE_DIR: ${EIGEN_INCLUDE_DIR}")
+endif()
+
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+
 set( pcallign_dso SOP_PCAllign)
 
 add_library( ${pcallign_dso} SHARED
+	src/intel_fgr.hpp
+	src/intel_fgr.cpp
+	src/pcl_fpfh.hpp
 	src/SOP_PCAlign.cpp
 	src/SOP_PCAlign.hpp)
 
 target_link_libraries( ${pcallign_dso} Houdini)
+target_link_libraries( ${pcallign_dso} ${PCL_COMMON_LIBRARIES} ${PCL_FEATURES_LIBRARIES})
 houdini_configure_target( ${pcallign_dso} )
 
 
