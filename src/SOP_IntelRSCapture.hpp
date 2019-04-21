@@ -15,8 +15,7 @@ protected:
     /// Method to cook geometry for the SOP
     virtual OP_ERROR         cookMySop(OP_Context &context);
 private:
-    rs2::pointcloud pointcloud;
-    rs2::points points;
+
     rs2::pipeline pipe;
 };
 

@@ -31,14 +31,15 @@ newSopOperator(OP_OperatorTable *table)
 }
 
 static PRM_Name names[] = {
-    PRM_Name("model",   "Model"),
+        PRM_Name("model",   "Model"),
+        PRM_Name("distance",   "Distance threshold"),
 };
 
 PRM_Template
 SOP_RSCapture::myTemplateList[] = {
-    PRM_Template(),
+        PRM_Template(PRM_FLT_J, 1, &names[1], PRMoneDefaults),
+        PRM_Template(),
 };
-
 
 OP_Node *
 SOP_RSCapture::myConstructor(OP_Network *net, const char *name, OP_Operator *op)
@@ -50,33 +51,38 @@ SOP_RSCapture::SOP_RSCapture(OP_Network *net, const char *name, OP_Operator *op)
     : SOP_Node(net, name, op)
 {
     mySopFlags.setManagesDataIDs(true);
-    pipe.start();
-    // Wait for the next set of frames from the camera
-    for (int i=0; i<30; ++i) {
-        rs2::frameset tmp = pipe.wait_for_frames();
-    }
+
 }
 
 SOP_RSCapture::~SOP_RSCapture() {
-    pipe.stop();
+
 }
 
 OP_ERROR
 SOP_RSCapture::cookMySop(OP_Context &context)
 {
-    flags().timeDep = 1;
-    OP_AutoLockInputs inputs(this);
-    if (inputs.lock(context) >= UT_ERROR_ABORT)
-        return error();
-    
+    flags().setTimeDep(1);
 
-    
+    OP_AutoLockInputs inputs(this);
+    if (inputs.lock(context) >= UT_ERROR_ABORT) {
+        return error();
+    }
+    rs2::pointcloud pointcloud;
+    rs2::points points;
+
+    rs2::config config;
+    config.enable_all_streams();
+    pipe.start(config);
+
+    const fpreal t = context.getTime();
+    const float distance = evalFloat("distance", 0, t);
 
     rs2::frameset frames = pipe.wait_for_frames();
     const bool result = (frames.size() != 0);
 
     if (!result) {
         addWarning(SOP_MESSAGE, "No capture.");
+        pipe.stop();
         return error();
     }
 
@@ -88,19 +94,20 @@ SOP_RSCapture::cookMySop(OP_Context &context)
     }
     // Generate the pointcloud and texture mappings
     points = pointcloud.calculate(depth);
-    const size_t nverts = points.size();
-    if (nverts == 0) {
+    if ( points.size() == 0) {
         addWarning(SOP_MESSAGE, "No points.");
+        pipe.stop();
         return error();
     }
     
     rs2::video_frame color = frames.get_color_frame();
     if (!color) {
         addWarning(SOP_MESSAGE, "No depth frame");
+        pipe.stop();
         return error();
     }
-    pointcloud.map_to(color);
 
+    pointcloud.map_to(color);
     const int height = color.get_height();
     const int width  = color.get_width();
     const uint8_t * rgb_buff = static_cast<const uint8_t*>(color.get_data());
@@ -109,7 +116,7 @@ SOP_RSCapture::cookMySop(OP_Context &context)
     const rs2::texture_coordinate * uvs = points.get_texture_coordinates();
 
     gdp->clearAndDestroy();
-    gdp->appendPointBlock(nverts); 
+    gdp->appendPointBlock(points.size());
 
     GA_RWHandleV3 cdh(gdp->addDiffuseAttribute(GA_ATTRIB_POINT));
     GA_RWHandleV3 uvh(gdp->addFloatTuple(GA_ATTRIB_POINT, "uv", 3));
@@ -132,6 +139,15 @@ SOP_RSCapture::cookMySop(OP_Context &context)
         uvh.set(ptoff, uvv);
     }
 
+    {
+        GA_FOR_ALL_PTOFF(gdp, ptoff) {
+            const UT_Vector3 pos = gdp->getPos3(ptoff);
+            if (pos.z() >= distance)
+                gdp->destroyPointOffset(ptoff);
+            }
+    }
+
+    pipe.stop();
     gdp->getP()->bumpDataId();
     
 
