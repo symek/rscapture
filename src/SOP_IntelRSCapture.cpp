@@ -51,9 +51,13 @@ SOP_RSCapture::SOP_RSCapture(OP_Network *net, const char *name, OP_Operator *op)
     : SOP_Node(net, name, op)
 {
     mySopFlags.setManagesDataIDs(true);
-//    rs2::config config;
-//    config.enable_all_streams();
-//    pipe.start(config);
+    rs2::context ctx;
+    auto list = ctx.query_devices(); // Get a snapshot of currently connected devices
+    if (list.size() == 0)
+        throw std::runtime_error("No device detected. Is it plugged in?");
+
+    device = list.front();
+
     pipe.start();
 
     for (int i=0; i<30; ++i) {
@@ -77,13 +81,12 @@ SOP_RSCapture::cookMySop(OP_Context &context)
         return error();
     }
 
-
     const fpreal t = context.getTime();
     const float distance = evalFloat("distance", 0, t);
 
     while(frames.size() == 0 || refresh_frames) {
         frames = pipe.wait_for_frames();
-        if(frames.size() != 0);
+        if(frames.size() != 0)
             refresh_frames = false;
     }
 

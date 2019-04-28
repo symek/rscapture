@@ -17,6 +17,7 @@ protected:
 private:
 
     bool refresh_frames = false;
+    rs2::device     device;
     rs2::pipeline   pipe;
     rs2::pointcloud pointcloud;
     rs2::points     points;
