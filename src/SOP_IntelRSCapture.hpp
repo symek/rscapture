@@ -16,7 +16,11 @@ protected:
     virtual OP_ERROR         cookMySop(OP_Context &context);
 private:
 
-    rs2::pipeline pipe;
+    bool refresh_frames = false;
+    rs2::pipeline   pipe;
+    rs2::pointcloud pointcloud;
+    rs2::points     points;
+    rs2::frameset   frames;
 };
 
 } // End rscapture namespace

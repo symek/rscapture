@@ -51,11 +51,20 @@ SOP_RSCapture::SOP_RSCapture(OP_Network *net, const char *name, OP_Operator *op)
     : SOP_Node(net, name, op)
 {
     mySopFlags.setManagesDataIDs(true);
+//    rs2::config config;
+//    config.enable_all_streams();
+//    pipe.start(config);
+    pipe.start();
+
+    for (int i=0; i<30; ++i) {
+        rs2::frameset tmp = pipe.wait_for_frames();
+    }
+
 
 }
 
 SOP_RSCapture::~SOP_RSCapture() {
-
+    pipe.stop();
 }
 
 OP_ERROR
@@ -67,50 +76,40 @@ SOP_RSCapture::cookMySop(OP_Context &context)
     if (inputs.lock(context) >= UT_ERROR_ABORT) {
         return error();
     }
-    rs2::pointcloud pointcloud;
-    rs2::points points;
 
-    rs2::config config;
-    config.enable_all_streams();
-    pipe.start(config);
 
     const fpreal t = context.getTime();
     const float distance = evalFloat("distance", 0, t);
 
-    rs2::frameset frames = pipe.wait_for_frames();
-    const bool result = (frames.size() != 0);
-
-    if (!result) {
-        addWarning(SOP_MESSAGE, "No capture.");
-        pipe.stop();
-        return error();
+    while(frames.size() == 0 || refresh_frames) {
+        frames = pipe.wait_for_frames();
+        if(frames.size() != 0);
+            refresh_frames = false;
     }
+
 
     rs2::depth_frame depth = frames.get_depth_frame();
     if (!depth) {
         addWarning(SOP_MESSAGE, "No depth frame");
-        pipe.stop();
         return error();
     }
     // Generate the pointcloud and texture mappings
     points = pointcloud.calculate(depth);
     if ( points.size() == 0) {
         addWarning(SOP_MESSAGE, "No points.");
-        pipe.stop();
         return error();
     }
     
     rs2::video_frame color = frames.get_color_frame();
     if (!color) {
-        addWarning(SOP_MESSAGE, "No depth frame");
-        pipe.stop();
+        addWarning(SOP_MESSAGE, "No color frame");
         return error();
     }
 
     pointcloud.map_to(color);
     const int height = color.get_height();
     const int width  = color.get_width();
-    const uint8_t * rgb_buff = static_cast<const uint8_t*>(color.get_data());
+    auto* rgb_buff   = static_cast<const uint8_t*>(color.get_data());
 
     const rs2::vertex * vertices        = points.get_vertices();
     const rs2::texture_coordinate * uvs = points.get_texture_coordinates();
@@ -126,11 +125,14 @@ SOP_RSCapture::cookMySop(OP_Context &context)
         const GA_Index index  = gdp->pointIndex(ptoff);
         const rs2::vertex & v = vertices[index];
         const rs2::texture_coordinate & uv = uvs[index];
-        const int   x = SYSfloor(uv.u * width)*3;
-        const int   y = SYSfloor(uv.v * height)*3;
-        const float r = SYSpow((float)rgb_buff[y*width+x+0]/255.0f, 2.2f);
-        const float g = SYSpow((float)rgb_buff[y*width+x+1]/255.0f, 2.2f);
-        const float b = SYSpow((float)rgb_buff[y*width+x+2]/255.0f, 2.2f);
+        const int   x = static_cast<int>(SYSfloor(uv.u * width)*3);
+        const int   y = static_cast<int>(SYSfloor(uv.v * height)*3);
+        const auto buffer_index = y * width + x;
+        if (buffer_index >= gdp->getNumPoints())
+            continue;
+        const float r = SYSpow((float)rgb_buff[buffer_index+0]/255.0f, 2.2f);
+        const float g = SYSpow((float)rgb_buff[buffer_index+1]/255.0f, 2.2f);
+        const float b = SYSpow((float)rgb_buff[buffer_index+2]/255.0f, 2.2f);
         const UT_Vector3 cdv(r, g, b);
         const UT_Vector3 uvv(uv.u, 1.f - uv.v, 0);
         const UT_Vector3 pos(v.x, v.y, v.z);
@@ -147,8 +149,8 @@ SOP_RSCapture::cookMySop(OP_Context &context)
             }
     }
 
-    pipe.stop();
     gdp->getP()->bumpDataId();
+    refresh_frames = true;
     
 
     return error();
